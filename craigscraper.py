@@ -60,6 +60,12 @@ def get_single_node(node, path, decode=False):
     return data
 
 
+def stringify_list(lst, sep="<br>"):
+    lst = [decode_node(node).strip() for node in lst]
+    lst = [s for s in lst if s]
+    return sep.join(lst)
+
+
 def get_info(listing):
     """Parses a listing a returns details of the listing in a dictionary."""
 
@@ -69,30 +75,32 @@ def get_info(listing):
 
     title = get_single_node(listing, './p/a[@class="result-title hdrlnk"]/text()', decode=True)
 
-    housing_info = listing.xpath('./p/span[@class="result-meta"]/span[@class="housing"]/text()')
-    if housing_info:
-        housing_info = " ".join(housing_info[0].split())
+    # housing_info = listing.xpath('./p/span[@class="result-meta"]/span[@class="housing"]/text()')
+    # if housing_info:
+    #     housing_info = " ".join(housing_info[0].split())
 
     link = get_single_node(listing, './a[@class="result-image gallery"]')
     link = link.get('href') if len(link) > 0 else link
     link = "https://sfbay.craigslist.org" + link
 
+    # Stuff in inner page
+
     inner_page = requests.get(link)
     inner_tree = html.fromstring(inner_page.content)
-    description = inner_tree.xpath('//*[@id="postingbody"]/descendant-or-self::*/text()')
-    description = [decode_node(node) for node in description]
-    description = "<br>".join([s.strip() for s in description])
+    description = stringify_list(inner_tree.xpath('//*[@id="postingbody"]/descendant-or-self::*/text()'))
+
+    details = inner_tree.xpath('//p[@class="attrgroup"]/descendant-or-self::*/text()')
+    details = stringify_list(details)
 
     info = {
         "price"         : price,
         "date"          : date,
         "title"         : title,
-        "details"       : housing_info,
+        "details"       : details,
         "link"          : link,
         "description"   : description
     }
 
-    # print(info)
     return info
 
 
@@ -104,20 +112,17 @@ def get_matching_listings(listings, max_num=10):
     listings = temp
 
     # Condition: if price < $5000
-    filter_price = lambda listing: listing["price"] < 5000
+    filter_price = lambda listing: listing["price"] < 5000 and listing["price"] > 2500
 
     # Condition: at least 2 BR
-    filter_bed = lambda listing: re.search(r'2\s?br', listing["housing"], re.M|re.I)
+    filter_bed = lambda listing: re.match(r'(2|3)\s*br', listing["details"], re.M|re.I) is not None
 
     filters = [
         filter_price,
+        filter_bed
     ]
 
     return [listing for listing in listings if all([f(listing) for f in filters])]
-
-
-def stringify_list(lst, sep="<br>"):
-    return sep.join(str(e) for e in lst)
 
 
 def render_result(result):
@@ -139,8 +144,8 @@ def sendEmail(sc, debug=True):
     sender_password = "pokemongo"
     email_list = [
         "lbkchen@gmail.com"
-        # "jeromejsun@gmail.com",
-        # "a.yeung@berkeley.edu"
+        "jeromejsun@gmail.com",
+        "a.yeung@berkeley.edu"
     ]
     subject = "MATCH FOUND in Craigslist for Housing"
 
@@ -164,7 +169,7 @@ def sendEmail(sc, debug=True):
           <body>
             <p>
                 <b style='font-size:18px'>Dearest Comrade</b>,<br><br>
-                I am pleased to report that the following listings near you have matched your varied preferences:<br>
+                I am <b>pleased</b> to report that the following listings near you have matched your varied preferences:<br>
             </p>
 
             %s
@@ -172,10 +177,6 @@ def sendEmail(sc, debug=True):
             <p>
                 Best,<br>
                 <b style='font-size:18px'>Your Craigslist Brobot ♥</b>
-            </p>
-            <p>Hi!<br>
-               How are you?<br>
-               Here is the <a href="http://www.python.org">link</a> you wanted.
             </p>
           </body>
         </html>
