@@ -3,6 +3,8 @@ import requests
 import smtplib
 import sched, time
 import re
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 
 
 URL = "https://sfbay.craigslist.org/search/apa?query=berkeley&search_distance=1&postal=94704&availabilityMode=0"
@@ -35,6 +37,10 @@ def parse_price(price_str):
         return int(price_str)
 
 
+def decode_node(node):
+    return node.encode('ascii', 'ignore').decode('utf-8')
+
+
 def get_single_node(node, path, decode=False):
     data = node.xpath(path)
     if isinstance(data, str):
@@ -50,7 +56,7 @@ def get_single_node(node, path, decode=False):
             return data[0]
         return data[0]
     elif decode:
-        return data.encode('ascii', 'ignore').decode('utf-8')
+        return decode_node(data)
     return data
 
 
@@ -74,25 +80,26 @@ def get_info(listing):
     inner_page = requests.get(link)
     inner_tree = html.fromstring(inner_page.content)
     description = inner_tree.xpath('//*[@id="postingbody"]/descendant-or-self::*/text()')
-    description = "\n".join([s.strip() for s in description])
+    description = [decode_node(node) for node in description]
+    description = "<br>".join([s.strip() for s in description])
 
     info = {
-        "price"     : price,
-        "date"      : date,
-        "title"     : title,
-        "details"   : housing_info,
-        "link"      : link,
-        "description": description
+        "price"         : price,
+        "date"          : date,
+        "title"         : title,
+        "details"       : housing_info,
+        "link"          : link,
+        "description"   : description
     }
 
     # print(info)
     return info
 
 
-def get_matching_listings(listings, max=10):
+def get_matching_listings(listings, max_num=10):
     listings = [get_info(listing) for listing in listings]
     temp = []
-    for i in range(max):
+    for i in range(min(max_num, len(listings))):
         temp += [listings[i]]
     listings = temp
 
@@ -109,15 +116,15 @@ def get_matching_listings(listings, max=10):
     return [listing for listing in listings if all([f(listing) for f in filters])]
 
 
-def stringify_list(lst, sep="\n"):
+def stringify_list(lst, sep="<br>"):
     return sep.join(str(e) for e in lst)
 
 
 def render_result(result):
-    """Returns a string where `result` is a listing dictionary."""
+    """Returns html where `result` is a listing dictionary."""
     rendered = ""
     for key, value in result.items():
-        rendered += "%s: %s\n" % (key, value)
+        rendered += "<b style='font-size=14px'>%s</b>: %s<br>" % (key, value)
     return rendered
 
 def sendEmail(sc, debug=True):
@@ -125,15 +132,15 @@ def sendEmail(sc, debug=True):
         matching_listings = get_matching_listings([get_listings()[0]])
     else:
         matching_listings = get_matching_listings(get_listings())
-    sep = "\n\n----------<<----------------------------------->>----------\n\n"
+    sep = "<br><br><br><br>----------<<-------------------------------------------------------------->>----------<br><br><br><br>"
     rendered_listings = sep.join(list(map(render_result, matching_listings)))
 
     sender_email = "yourpokemongopal@gmail.com"
     sender_password = "pokemongo"
     email_list = [
-        "lbkchen@gmail.com",
-        "jeromejsun@gmail.com",
-        "a.yeung@berkeley.edu"
+        "lbkchen@gmail.com"
+        # "jeromejsun@gmail.com",
+        # "a.yeung@berkeley.edu"
     ]
     subject = "MATCH FOUND in Craigslist for Housing"
 
@@ -147,13 +154,34 @@ def sendEmail(sc, debug=True):
     server.starttls()
     server.login(sender_email, sender_password)
     for email in email_list:
-        msg = "\n".join([
-            "From: %s" % sender_email,
-            "To: %s" % email,
-            "Subject: %s" % subject,
-            ""]) + "\n" + ("Dearest Comrade,\nI am pleased to report that the following listings near you have matched your preferences: \n\n%s." % rendered_listings) + \
-            "\n\nBest,\nYour Craigslist Bro"
-        server.sendmail(sender_email, email, msg)
+        msg = MIMEMultipart('alternative')
+        msg['Subject'] = subject
+        msg['From'] = sender_email
+        msg['To'] = email
+        html = """\
+        <html>
+          <head></head>
+          <body>
+            <p>
+                <b style='font-size:18px'>Dearest Comrade</b>,<br><br>
+                I am pleased to report that the following listings near you have matched your varied preferences:<br>
+            </p>
+
+            %s
+
+            <p>
+                Best,<br>
+                <b style='font-size:18px'>Your Craigslist Brobot ♥</b>
+            </p>
+            <p>Hi!<br>
+               How are you?<br>
+               Here is the <a href="http://www.python.org">link</a> you wanted.
+            </p>
+          </body>
+        </html>
+        """ % rendered_listings
+        msg.attach(MIMEText(html, 'html'))
+        server.sendmail(sender_email, email, msg.as_string())
     print("Sent emails to:", ", ".join(email_list))
     server.quit()
     sc.enter(600, 1, sendEmail, (sc, DEBUG))
