@@ -84,22 +84,29 @@ def get_info(listing):
     link = "https://sfbay.craigslist.org" + link
 
     # Stuff in inner page
+    try:
+        inner_page = requests.get(link)
+        inner_tree = html.fromstring(inner_page.content)
+        description = stringify_list(inner_tree.xpath('//*[@id="postingbody"]/descendant-or-self::*/text()'))
 
-    inner_page = requests.get(link)
-    inner_tree = html.fromstring(inner_page.content)
-    description = stringify_list(inner_tree.xpath('//*[@id="postingbody"]/descendant-or-self::*/text()'))
+        details = inner_tree.xpath('//p[@class="attrgroup"]/descendant-or-self::*/text()')
+        details = stringify_list(details, sep=", ")
 
-    details = inner_tree.xpath('//p[@class="attrgroup"]/descendant-or-self::*/text()')
-    details = stringify_list(details)
+        inner_info = {
+            "description"   : description,
+            "details"       : details
+        }
+    except OSError as e:
+        inner_info = {}
+        print("Link doesn't exist: " + str(e))
 
     info = {
         "price"         : price,
         "date"          : date,
         "title"         : title,
-        "details"       : details,
         "link"          : link,
-        "description"   : description
     }
+    info.update(inner_info)
 
     return info
 
@@ -143,9 +150,9 @@ def sendEmail(sc, debug=True):
     sender_email = "yourpokemongopal@gmail.com"
     sender_password = "pokemongo"
     email_list = [
-        "lbkchen@gmail.com"
-        "jeromejsun@gmail.com",
-        "a.yeung@berkeley.edu"
+        "lbkchen@gmail.com",
+        # "jeromejsun@gmail.com",
+        # "a.yeung@berkeley.edu",
     ]
     subject = "MATCH FOUND in Craigslist for Housing"
 
