@@ -75,10 +75,6 @@ def get_info(listing):
 
     title = get_single_node(listing, './p/a[@class="result-title hdrlnk"]/text()', decode=True)
 
-    # housing_info = listing.xpath('./p/span[@class="result-meta"]/span[@class="housing"]/text()')
-    # if housing_info:
-    #     housing_info = " ".join(housing_info[0].split())
-
     link = get_single_node(listing, './a[@class="result-image gallery"]')
     link = link.get('href') if len(link) > 0 else link
     link = "https://sfbay.craigslist.org" + link
@@ -122,11 +118,15 @@ def get_matching_listings(listings, max_num=10):
     filter_price = lambda listing: listing["price"] < 5000 and listing["price"] > 2500
 
     # Condition: at least 2 BR
-    filter_bed = lambda listing: re.match(r'(2|3)\s*br', listing["details"], re.M|re.I) is not None
+    filter_bed = lambda listing: re.match(r'(2|3|4)\s*br', listing["details"], re.M|re.I) is not None
+
+    # Condition: at least 2 BA
+    filter_bath = lambda listing: re.match(r'(2|3)\s*ba', listing["details"], re.M|re.I) is not None
 
     filters = [
         filter_price,
-        filter_bed
+        filter_bed,
+        filter_bath, 
     ]
 
     return [listing for listing in listings if all([f(listing) for f in filters])]
