@@ -132,17 +132,17 @@ def get_matching_listings(listings, max_num=10):
     listings = temp
 
     # Condition: if price < $3600
-    filter_price = lambda listing: listing["price"] < 3600 and listing["price"] > 2400
+    filter_price = lambda listing: listing["price"] < 3800 and listing["price"] > 2400
 
     # Condition: at least 2 BR
     filter_bed = lambda listing: re.match(r'(2|3|4)\s*br', listing["details"], re.M|re.I) is not None
 
-    # Condition: at least 2 BA
-    filter_bath = lambda listing: re.match(r'(2|3)\s*ba', listing["details"], re.M|re.I) is not None
+    # Condition: at least 1 BA
+    filter_bath = lambda listing: re.match(r'(1|2|3)\s*ba', listing["details"], re.M|re.I) is not None
 
     filters = [
         filter_price,
-        filter_bed,
+        # filter_bed,
         # filter_bath,
     ]
 
@@ -174,8 +174,9 @@ def sendEmail(sc, max_pages, debug=True):
     sender_password = "pokemongo"
     email_list = [
         "lbkchen@gmail.com",
-        # "jeromejsun@gmail.com",
-        # "a.yeung@berkeley.edu",
+        "jeromejsun@gmail.com",
+        "a.yeung@berkeley.edu",
+        "anthonywong@berkeley.edu",
     ]
     subject = "MATCH FOUND in Craigslist for Housing"
 
@@ -215,7 +216,7 @@ def sendEmail(sc, max_pages, debug=True):
         server.sendmail(sender_email, email, msg.as_string())
     print("Sent emails to:", ", ".join(email_list))
     server.quit()
-    sc.enter(600, 1, sendEmail, (sc, max_pages, DEBUG))
+    sc.enter(6000, 1, sendEmail, (sc, max_pages, DEBUG))
 
 
 def main():
