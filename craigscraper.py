@@ -3,6 +3,8 @@ import requests
 import smtplib
 import sched, time
 import re
+import argparse
+from math import ceil
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
@@ -11,10 +13,25 @@ URL = "https://sfbay.craigslist.org/search/apa?query=berkeley&search_distance=1&
 DEBUG = False
 
 
-def get_listings():
+def get_listings(max_pages=10):
+    """Returns the listings from the first max_pages of craigslist."""
     page = requests.get(URL)
     tree = html.fromstring(page.content)
-    listings = tree.xpath('//li[@class="result-row"]')
+    listing_xpath = '//li[@class="result-row"]'
+    listings = tree.xpath(listing_xpath)
+
+    # Get total number of listings
+    default_lpp = 120  # Default number of listings on each page
+    num_listings = int(tree.xpath('//span[@class="totalcount"]/text()')[0])
+    total_pages = ceil(num_listings / default_lpp)
+
+    # Get next pages
+    for i in range(min(max_pages - 1, total_pages)):
+        next_page = requests.get(URL + "&s=%s" % (default_lpp * i))
+        next_tree = html.fromstring(page.content)
+        next_listings = tree.xpath(listing_xpath)
+        listings.extend(next_listings)
+
     return listings
 
 
@@ -114,8 +131,8 @@ def get_matching_listings(listings, max_num=10):
         temp += [listings[i]]
     listings = temp
 
-    # Condition: if price < $5000
-    filter_price = lambda listing: listing["price"] < 5000 and listing["price"] > 2500
+    # Condition: if price < $3600
+    filter_price = lambda listing: listing["price"] < 3600 and listing["price"] > 2400
 
     # Condition: at least 2 BR
     filter_bed = lambda listing: re.match(r'(2|3|4)\s*br', listing["details"], re.M|re.I) is not None
@@ -126,7 +143,7 @@ def get_matching_listings(listings, max_num=10):
     filters = [
         filter_price,
         filter_bed,
-        filter_bath, 
+        # filter_bath,
     ]
 
     return [listing for listing in listings if all([f(listing) for f in filters])]
@@ -139,13 +156,19 @@ def render_result(result):
         rendered += "<b style='font-size=14px'>%s</b>: %s<br>" % (key, value)
     return rendered
 
-def sendEmail(sc, debug=True):
+
+def sendEmail(sc, max_pages, debug=True):
     if debug:
-        matching_listings = get_matching_listings([get_listings()[0]])
+        matching_listings = get_matching_listings([get_listings(max_pages=max_pages)[0]])
     else:
-        matching_listings = get_matching_listings(get_listings())
+        matching_listings = get_matching_listings(get_listings(max_pages=max_pages))
+
     sep = "<br><br><br><br>----------<<-------------------------------------------------------------->>----------<br><br><br><br>"
-    rendered_listings = sep.join(list(map(render_result, matching_listings)))
+
+    if matching_listings:
+        rendered_listings = sep.join(list(map(render_result, matching_listings)))
+    else:
+        rendered_listings = "<br><b style='font-size=14px'>No matches found :(</b><br>"
 
     sender_email = "yourpokemongopal@gmail.com"
     sender_password = "pokemongo"
@@ -182,8 +205,8 @@ def sendEmail(sc, debug=True):
             %s
 
             <p>
-                Best,<br>
-                <b style='font-size:18px'>Your Craigslist Brobot ♥</b>
+                <br>Best,<br>
+                <b style='font-size:18px'>Your Craigslist Brobot <span style='color:#d12743'>♥</span></b>
             </p>
           </body>
         </html>
@@ -192,12 +215,21 @@ def sendEmail(sc, debug=True):
         server.sendmail(sender_email, email, msg.as_string())
     print("Sent emails to:", ", ".join(email_list))
     server.quit()
-    sc.enter(600, 1, sendEmail, (sc, DEBUG))
+    sc.enter(600, 1, sendEmail, (sc, max_pages, DEBUG))
 
 
 def main():
+    parser = argparse.ArgumentParser(description="Enter a maximum number of pages to scrape.")
+    parser.add_argument(
+        "--max",
+        default=10,
+        help="Max number of pages to scrape.",
+        type=int
+    )
+    args = parser.parse_args()
+
     s = sched.scheduler(time.time, time.sleep)
-    s.enter(1, 1, sendEmail, (s, DEBUG))
+    s.enter(1, 1, sendEmail, (s, args.max, DEBUG))
     s.run()
 
 
